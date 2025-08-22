@@ -845,7 +845,8 @@ guide_gengrob.colourfan <- function(guide, theme) {
 #' @rdname guide_colourfan
 guide_colorfan <- guide_colourfan
 
-
+#' @noRd
+#' @keywords internal
 colourfan_grob <- function(colours, nrow, ncol, nmunch = 10) {
   # the trick is that we first make square polygons and then transform coordinates
   dx <- 1 / ncol
@@ -870,6 +871,8 @@ colourfan_grob <- function(colours, nrow, ncol, nmunch = 10) {
 # assumes x and y run from 0 to 1
 # x runs left to right
 # y runs top to bottom
+#' @noRd
+#' @keywords internal
 transform_radial <- function(data, xoff = 0, yoff = 0) {
   phi <- (data$x * 60 - 30)*(pi/180)
   Y <- (data$y + yoff) * cos(phi) - xoff * sin(60*pi/360)
@@ -881,7 +884,8 @@ transform_radial <- function(data, xoff = 0, yoff = 0) {
 # -------------------------------------------------------------------------
 # -------------------------------------------------------------------------
 
-
+#' @noRd
+#' @keywords internal
 width_cm <- function(x) {
   if (grid::is.grob(x)) {
     grid::convertWidth(grid::grobWidth(x), "cm", TRUE)
@@ -894,6 +898,8 @@ width_cm <- function(x) {
   }
 }
 
+#' @noRd
+#' @keywords internal
 height_cm <- function(x) {
   if (grid::is.grob(x)) {
     grid::convertHeight(grid::grobHeight(x), "cm", TRUE)
@@ -906,6 +912,8 @@ height_cm <- function(x) {
   }
 }
 
+#' @noRd
+#' @keywords internal
 matched_aes <- function(layer, guide, defaults) {
   all <- names(c(layer$mapping, if (layer$inherit.aes) defaults, layer$stat$default_aes))
   geom <- c(layer$geom$required_aes, names(layer$geom$default_aes))
@@ -915,8 +923,390 @@ matched_aes <- function(layer, guide, defaults) {
 }
 
 # not copied for now
-element_render <- ggplot2:::element_render
-ggname <- ggplot2:::ggname
-justify_grobs <- ggplot2:::justify_grobs
-is.waive <- ggplot2:::is.waive
+# element_render <- ggplot2:::element_render
+# ggname <- ggplot2:::ggname
+# justify_grobs <- ggplot2:::justify_grobs
+# is.waive <- ggplot2:::is.waive
+
+
+# ---- ggname --------------------------------------------------------------
+# Vendored and renamed from ggplot2 (original internal function)
+#
+# Description:
+# This function adds a name to a grob object using a prefix, useful for debugging and layout management.
+#' @noRd
+#' @keywords internal
+ggname <- function (prefix, grob)
+{
+  grob$name <- grid::grobName(grob, prefix)
+  grob
+}
+
+
+# ---- element_render ------------------------------------------------------
+# Vendored and renamed from ggplot2 (original internal function)
+#
+# Description:
+# Renders a theme element (like axis text or legend title) into a grob. If the element is missing,
+# returns a zeroGrob and informs the user.
+#' @noRd
+#' @keywords internal
+#' @importFrom cli cli_inform
+element_render <- function (theme, element, ..., name = NULL)
+{
+  el <- ggplot2::calc_element(element, theme)
+  if (is.null(el)) {
+    cli::cli_inform("Theme element {.var {element}} is missing")
+    return(ggplot2::zeroGrob())
+  }
+  grob <- ggplot2::element_grob(el, ...)
+  ggname(paste(element, name, sep = "."), grob)
+}
+
+# ---- justify_grobs -------------------------------------------------------
+
+
+
+#' Stop if an input's type is not one of a permitted set.
+#'
+#' This is an internal validation function that provides informative error
+#' messages about mismatched types. It relies on a set of vendored helper
+#' functions (`obj_type_friendly_bartman` and its dependencies) to remain
+#' self-contained and avoid issues with changing `rlang` versions.
+#'
+#' @param x The input object to check.
+#' @param what A character vector of allowed type descriptions (e.g., "a string").
+#' @param ... Additional arguments passed to `rlang::abort`.
+#' @param allow_na Should `NA` be considered a permitted type?
+#' @param allow_null Should `NULL` be considered a permitted type?
+#' @param show_value Should the error message include the value of `x`?
+#' @param arg The argument name to report in the error message.
+#' @param call The environment to report in the error message.
+#'
+#' @noRd
+#' @keywords internal
+stop_input_type_alter <- function(x, what, ..., allow_na = FALSE, allow_null = FALSE,
+                                  show_value = TRUE, # <-- FIX: Added this missing parameter
+                                  arg = rlang::caller_arg(x), call = rlang::caller_env())
+{
+  # Helper to format code elements in messages
+  format_code <- function(x) sprintf("`%s`", x)
+  format_arg <- function(x) sprintf("`%s`", x)
+
+  if (allow_na) {
+    what <- c(what, format_code("NA"))
+  }
+  if (allow_null) {
+    what <- c(what, format_code("NULL"))
+  }
+  if (length(what)) {
+    what <- oxford_comma_bartman(what)
+  }
+
+  message <- sprintf("%s must be %s, not %s.", format_arg(arg),
+                     what, obj_type_friendly_bartman(x, value = show_value))
+
+  rlang::abort(message, ..., call = call, arg = arg)
+}
+
+# This file contains compatibility functions vendored (copied and adapted) from
+# ggplot2 and rlang internals. This makes the package self-contained and robust
+# against changes in dependency versions. All functions are suffixed with
+# `_bartman` to avoid namespace conflicts.
+
+
+#' Format a character vector into a comma-separated list.
+#'
+#' Handles the "Oxford comma" for lists of three or more items.
+#' e.g., `c("a", "b", "c")` -> `"a, b, or c"`
+#'
+#' @noRd
+#' @keywords internal
+oxford_comma_bartman <- function (chr, sep = ", ", final = "or")
+{
+  n <- length(chr)
+  if (n < 2) {
+    return(chr)
+  }
+  head <- chr[seq_len(n - 1)]
+  last <- chr[n]
+  head_str <- paste(head, collapse = sep)
+
+  # IMPROVEMENT: Corrected logic for true Oxford comma and n=2 case
+  if (n > 2) {
+    paste0(head_str, ",", sep, final, " ", last)
+  } else {
+    paste0(head_str, " ", final, " ", last)
+  }
+}
+
+
+# Main function to be used in the package
+# Original source: ggplot2:::obj_type_friendly
+#' @noRd
+#' @keywords internal
+obj_type_friendly_bartman <- function(x, value = TRUE) {
+  if (rlang::is_missing(x)) {
+    return("absent")
+  }
+  if (is.object(x)) {
+    if (inherits(x, "quosure")) {
+      type <- "quosure"
+    }
+    else {
+      type <- paste(class(x), collapse = "/")
+    }
+    return(sprintf("a <%s> object", type))
+  }
+  if (!rlang::is_vector(x)) {
+    return(as_friendly_type_bartman(typeof(x)))
+  }
+  n_dim <- length(dim(x))
+  if (!n_dim) {
+    if (!is.list(x) && length(x) == 1) {
+      if (rlang::is_na(x)) {
+        return(switch(typeof(x),
+                      logical = "`NA`",
+                      integer = "an integer `NA`",
+                      double = if (is.nan(x)) {
+                        "`NaN`"
+                      } else {
+                        "a numeric `NA`"
+                      },
+                      complex = "a complex `NA`",
+                      character = "a character `NA`",
+                      stop_unexpected_typeof_bartman(x)
+        ))
+      }
+      show_infinites <- function(x) {
+        if (x > 0) {
+          "`Inf`"
+        }
+        else {
+          "`-Inf`"
+        }
+      }
+      str_encode <- function(x, width = 30, ...) {
+        if (nchar(x) > width) {
+          x <- substr(x, 1, width - 3)
+          x <- paste0(x, "...")
+        }
+        encodeString(x, ...)
+      }
+      if (value) {
+        if (is.numeric(x) && is.infinite(x)) {
+          return(show_infinites(x))
+        }
+        if (is.numeric(x) || is.complex(x)) {
+          number <- as.character(round(x, 2))
+          what <- if (is.complex(x))
+            "the complex number"
+          else
+            "the number"
+          return(paste(what, number))
+        }
+        return(switch(typeof(x),
+                      logical = if (x) "`TRUE`" else "`FALSE`",
+                      character = {
+                        what <- if (nzchar(x)) "the string" else "the empty string"
+                        paste(what, str_encode(x, quote = "\""))
+                      },
+                      raw = paste("the raw value", as.character(x)),
+                      stop_unexpected_typeof_bartman(x)
+        ))
+      }
+      return(switch(typeof(x),
+                    logical = "a logical value",
+                    integer = "an integer",
+                    double = if (is.infinite(x)) show_infinites(x) else "a number",
+                    complex = "a complex number",
+                    character = if (nzchar(x)) "a string" else "\"\"",
+                    raw = "a raw value",
+                    stop_unexpected_typeof_bartman(x)
+      ))
+    }
+    if (length(x) == 0) {
+      return(switch(typeof(x),
+                    logical = "an empty logical vector",
+                    integer = "an empty integer vector",
+                    double = "an empty numeric vector",
+                    complex = "an empty complex vector",
+                    character = "an empty character vector",
+                    raw = "an empty raw vector",
+                    list = "an empty list",
+                    stop_unexpected_typeof_bartman(x)
+      ))
+    }
+  }
+  vec_type_friendly_bartman(x)
+}
+
+
+# Internal helper
+# Original source: ggplot2:::vec_type_friendly
+#' @noRd
+#' @keywords internal
+vec_type_friendly_bartman <- function(x) {
+  if (is.matrix(x)) {
+    return("a matrix")
+  }
+  if (is.array(x) && length(dim(x)) > 2) {
+    return("an array")
+  }
+  type <- as_friendly_type_bartman(typeof(x))
+  if (is.list(x) && is.object(x)) {
+    sprintf("a list of <%s> objects", paste0(class(x), collapse = "/"))
+  } else {
+    paste0("a ", type, " vector")
+  }
+}
+
+# Internal helper
+# Original source: rlang:::.rlang_as_friendly_type
+#' @noRd
+#' @keywords internal
+as_friendly_type_bartman <- function(type) {
+  switch(type,
+         logical = "logical",
+         integer = "integer",
+         double = "numeric",
+         complex = "complex",
+         character = "character",
+         raw = "raw",
+         list = "list",
+         NULL = "NULL",
+         environment = "environment",
+         externalptr = "external pointer",
+         weakref = "weak reference",
+         S4 = "S4",
+         name = "symbol",
+         language = "language",
+         pairlist = "pairlist",
+         expression = "expression",
+         char = "internal character",
+         promise = "promise",
+         ... = "internal",
+         builtin = "primitive",
+         special = "primitive",
+         type
+  )
+}
+
+# Internal helper
+# Original source: rlang:::.rlang_stop_unexpected_typeof
+#' @noRd
+#' @keywords internal
+stop_unexpected_typeof_bartman <- function(x) {
+  stop(sprintf("Unexpected type <%s>", typeof(x)))
+}
+
+
+
+
+
+
+
+
+
+
+# -------------------------------------------------------------------------
+
+
+
+#' @noRd
+#' @keywords internal
+#' @importFrom vctrs vec_size_common vec_recycle
+rotate_just_alter <-
+  function (angle, hjust, vjust)
+  {
+    angle <- (angle %||% 0)%%360
+    if (is.character(hjust)) {
+      hjust <- match(hjust, c("left", "right")) - 1
+      hjust[is.na(hjust)] <- 0.5
+    }
+    if (is.character(vjust)) {
+      vjust <- match(vjust, c("bottom", "top")) - 1
+      vjust[is.na(vjust)] <- 0.5
+    }
+    size <- vctrs::vec_size_common(angle, hjust, vjust)
+    angle <-  vctrs::vec_recycle(angle, size)
+    hjust <-  vctrs::vec_recycle(hjust, size)
+    vjust <-  vctrs::vec_recycle(vjust, size)
+    case <- findInterval(angle, c(0, 90, 180, 270, 360))
+    hnew <- hjust
+    vnew <- vjust
+    is_case <- which(case == 2)
+    hnew[is_case] <- 1 - vjust[is_case]
+    vnew[is_case] <- hjust[is_case]
+    is_case <- which(case == 3)
+    hnew[is_case] <- 1 - hjust[is_case]
+    vnew[is_case] <- 1 - vjust[is_case]
+    is_case <- which(case == 4)
+    hnew[is_case] <- vjust[is_case]
+    vnew[is_case] <- 1 - hjust[is_case]
+    list(hjust = hnew, vjust = vnew)
+  }
+
+#' @noRd
+#' @keywords internal
+#' @importFrom cli cli_text cli_fmt
+#' @importFrom rlang caller_env
+as_cli_bartman <- function (..., env = rlang::caller_env())
+{
+  cli::cli_fmt(cli::cli_text(..., .envir = env))
+}
+
+
+#' @noRd
+#' @keywords internal
+justify_grobs <- function (grobs, x = NULL, y = NULL, hjust = 0.5, vjust = 0.5,
+                                 int_angle = 0, debug = FALSE)
+{
+  if (!inherits(grobs, "grob")) {
+    if (is.list(grobs)) {
+      return(lapply(grobs, justify_grobs, x, y, hjust,
+                    vjust, int_angle, debug))
+    }
+    else {
+      stop_input_type_alter(grobs,
+                            as_cli_bartman("an individual {.cls grob} or list of {.cls grob} objects"))
+    }
+  }
+  if (inherits(grobs, "zeroGrob")) {
+    return(grobs)
+  }
+  just <- rotate_just_alter(int_angle, hjust, vjust)
+  x <- x %||% unit(just$hjust, "npc")
+  y <- y %||% unit(just$vjust, "npc")
+  if (isTRUE(debug)) {
+    children <- grid::gList(grid::rectGrob(gp = grid::gpar(fill = "lightcyan",
+                                                           col = NA)), grobs)
+  }
+  else {
+    children = grid::gList(grobs)
+  }
+  result_grob <-  grid::gTree(children = children, vp = grid::viewport(x = x,
+                                                                 y = y,
+                                                                 width = grid::grobWidth(grobs),
+                                                                 height = grid::grobHeight(grobs),
+                                                                 just = unlist(just)))
+  if (isTRUE(debug)) {
+    grid::grobTree(result_grob, grid::pointsGrob(x, y, pch = 20, gp = grid::gpar(col = "mediumturquoise")))
+  }
+  else {
+    result_grob
+  }
+}
+
+
+# ---- is.waive -----------------------------------------------------------
+# Vendored from ggplot2 (trivial internal function)
+#
+# Description:
+# Checks whether an object is a ggplot2 'waiver' object, used to represent default behaviour.
+
+is.waive <- function(x) {
+  inherits(x, "waiver")
+}
+
 
